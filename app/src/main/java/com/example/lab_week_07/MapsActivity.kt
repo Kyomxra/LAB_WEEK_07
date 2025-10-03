@@ -10,6 +10,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.lab_week_07.databinding.ActivityMapsBinding
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
@@ -17,12 +19,13 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 
+
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityMapsBinding
-
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,15 +33,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         binding = ActivityMapsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
-
         requestPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
                 if (isGranted) {
-                    // If granted by the user, execute the necessary function
                     getLastLocation()
                 } else {
                     showPermissionRationale {
@@ -46,10 +43,17 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     }
                 }
             }
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        val mapFragment = supportFragmentManager
+            .findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
+
         when {
             hasLocationPermission() -> getLastLocation()
             shouldShowRequestPermissionRationale(ACCESS_FINE_LOCATION) -> {
@@ -71,11 +75,27 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             .setMessage("This app will not work without knowing your current location")
             .setPositiveButton(android.R.string.ok) { _, _ -> positiveAction() }
             .setNegativeButton(android.R.string.cancel) { dialog, _ -> dialog.dismiss() }
-            .create().show()
+            .create()
+            .show()
     }
 
     private fun getLastLocation() {
-        Log.d("MapsActivity", "getLastLocation() called.")
-        // TODO: implement FusedLocationProviderClient to get user location
+        try {
+            fusedLocationClient.lastLocation
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        val userLatLng = LatLng(location.latitude, location.longitude)
+                        mMap.addMarker(MarkerOptions().position(userLatLng).title("You are here"))
+                        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 15f))
+                    } else {
+                        Log.d("MapsActivity", "Location is null.")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("MapsActivity", "Error getting location", e)
+                }
+        } catch (e: SecurityException) {
+            Log.e("MapsActivity", "Location permission not granted", e)
+        }
     }
 }
